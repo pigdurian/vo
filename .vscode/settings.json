@@ -4,6 +4,10 @@
         "deque": "cpp",
         "string": "cpp",
         "vector": "cpp",
-        "iosfwd": "cpp"
+        "iosfwd": "cpp",
+        "algorithm": "cpp",
+        "list": "cpp",
+        "unordered_map": "cpp",
+        "system_error": "cpp"
     }
 }
