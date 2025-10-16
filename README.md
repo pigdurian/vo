@@ -159,6 +159,9 @@ save_png=false
 | 找不到 `00.txt` | 确认路径为 `.../data_odometry_poses/dataset/poses/00.txt` |
 | 程序启动但无图像     | 检查图像路径及命名格式（应为 6 位数字，例如 000000.png）                  |
 | 绿色轨迹和红色轨迹不重合 | 属于正常现象：绿色为本次 run 的相对坐标，红色为全局绝对坐标                     |
+| 找不到/mnt/hgfs | 手动搭载共享文件夹，命令：
+  sudo mkdir -p /mnt/hgfs 
+  sudo vmhgfs-fuse .host:/ /mnt/hgfs -o allow_other -o uid=$(id -u),gid=$(id -g)   |
 
 ---
 
@@ -176,7 +179,6 @@ cd build
 3. 点击「开始」运行视觉里程计！
 
 ---
-
-📚 **提示**：推荐提交时附上 `README.md` 与示例 `config.ini`，老师只需在终端运行 `./vo_gui` 即可开始测试。
+需在终端运行 `./vo_gui` 即可开始测试。
 
 ---

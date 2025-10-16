@@ -11,6 +11,7 @@ class QLineEdit;
 class QCheckBox;
 class QTableWidget;
 class QSplitter;
+class QSettings;
 
 class MainWindow : public QMainWindow
 {
@@ -31,6 +32,15 @@ private:
     void runSIFT(const cv::Mat &L, const cv::Mat &R);
     void runVO2D2D(const cv::Mat &prev, const cv::Mat &curr);
 
+    // 新增：配置相关声明（放到 private: 区域）
+private:
+    void loadConfig();
+    void saveConfig();
+    QString configPath() const;       // 返回配置文件路径
+
+protected:
+    void closeEvent(QCloseEvent* e) override;  // 退出时保存
+
 private:
     // --- UI 控件 ---
     QLabel *imgLeft_ = nullptr;
@@ -47,6 +57,8 @@ private:
     QCheckBox *cbSavePng_ = nullptr;
     QPushButton *btnRun_ = nullptr;
     QPushButton *btnStep_ = nullptr;
+    QLineEdit* editPosesRoot_ = nullptr;  // 新增：位姿目录（poses_root）
+
 
     TrajectoryView *trajView_ = nullptr;
     QTableWidget *tableTraj_ = nullptr; // 新增：中文表格
