@@ -17,12 +17,18 @@
 #include <QTableWidget>
 #include <QHeaderView>
 #include <QSplitter>
+#include <QSettings>
+#include <QStandardPaths>
+#include <QDir>
+#include <QCloseEvent>
+
 
 using namespace cv;
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
     setupUI();
+    loadConfig();
     connect(&timer_, &QTimer::timeout, this, &MainWindow::stepFrame);
 }
 
@@ -76,6 +82,7 @@ void MainWindow::setupUI()
         hb->addWidget(editSeq_, 1);
         hb->addWidget(btnChoose, 0);
     }
+    editPosesRoot_ = new QLineEdit("/mnt/hgfs/vo_data/data_odometry_poses");
     form->addRow("序列目录", seqRow);
 
     editFx_ = new QLineEdit("718.856");
@@ -186,7 +193,7 @@ void MainWindow::toggleRun()
         std::string base = editSeq_->text().toStdString();
 
         // ✅ Linux: 传根目录，VoEngine 会自己去 /dataset/poses/00.txt 等候选路径找
-        std::string poses_root = "/mnt/hgfs/vo_data/data_odometry_poses";
+       std::string poses_root = editPosesRoot_->text().toStdString();
 
         if (!engine_.init(base, K_, poses_root))
         {
@@ -354,4 +361,56 @@ void MainWindow::exportCSV()
     for (size_t i = 0; i < traj_.size(); ++i)
         fprintf(f, "%zu,%.9f,%.9f,%.9f\n", i, traj_[i].x, traj_[i].y, traj_[i].z);
     fclose(f);
+}
+QString MainWindow::configPath() const {
+    // 优先使用工作目录下的 config.ini；若没有，则使用用户配置目录
+    QString local = QDir::current().absoluteFilePath("config.ini");
+    if (QFile::exists(local)) return local;
+
+    QString base = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    if (base.isEmpty()) base = QDir::homePath() + "/.config/vo_gui";
+    QDir().mkpath(base);
+    return QDir(base).absoluteFilePath("config.ini");
+}
+
+void MainWindow::loadConfig() {
+    QSettings s(configPath(), QSettings::IniFormat);
+
+    // Paths
+    editSeq_->setText(s.value("paths/sequence",
+        "/mnt/hgfs/vo_data/data_odometry_gray/dataset/sequences/00").toString());
+    if (editPosesRoot_)
+        editPosesRoot_->setText(s.value("paths/poses_root",
+            "/mnt/hgfs/vo_data/data_odometry_poses").toString());
+
+    // Camera
+    editFx_->setText(s.value("camera/fx", "718.856").toString());
+    editFy_->setText(s.value("camera/fy", "718.856").toString());
+    editCx_->setText(s.value("camera/cx", "607.1928").toString());
+    editCy_->setText(s.value("camera/cy", "185.2157").toString());
+    editBaseline_->setText(s.value("camera/baseline", "0.537").toString());
+
+    // Run
+    editMaxFrames_->setText(s.value("run/max_frames", "500").toString());
+    cbSavePng_->setChecked(s.value("run/save_png", false).toBool());
+}
+
+void MainWindow::saveConfig() {
+    QSettings s(configPath(), QSettings::IniFormat);
+    s.setValue("paths/sequence",   editSeq_->text());
+    if (editPosesRoot_) s.setValue("paths/poses_root", editPosesRoot_->text());
+
+    s.setValue("camera/fx", editFx_->text());
+    s.setValue("camera/fy", editFy_->text());
+    s.setValue("camera/cx", editCx_->text());
+    s.setValue("camera/cy", editCy_->text());
+    s.setValue("camera/baseline", editBaseline_->text());
+
+    s.setValue("run/max_frames", editMaxFrames_->text());
+    s.setValue("run/save_png", cbSavePng_->isChecked());
+}
+
+void MainWindow::closeEvent(QCloseEvent* e) {
+    saveConfig();
+    QMainWindow::closeEvent(e);
 }
