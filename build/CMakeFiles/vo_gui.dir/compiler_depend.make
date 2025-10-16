@@ -1908,6 +1908,7 @@ CMakeFiles/vo_gui.dir/src/TrajectoryView.cpp.o: /home/jinniewu/projects/work4/sr
   /usr/include/x86_64-linux-gnu/qt5/QtCore/qvector.h \
   /usr/include/x86_64-linux-gnu/qt5/QtCore/qversiontagging.h \
   /usr/include/x86_64-linux-gnu/qt5/QtGui/QPainter \
+  /usr/include/x86_64-linux-gnu/qt5/QtGui/QPainterPath \
   /usr/include/x86_64-linux-gnu/qt5/QtGui/qbrush.h \
   /usr/include/x86_64-linux-gnu/qt5/QtGui/qcolor.h \
   /usr/include/x86_64-linux-gnu/qt5/QtGui/qcursor.h \
@@ -1919,6 +1920,7 @@ CMakeFiles/vo_gui.dir/src/TrajectoryView.cpp.o: /home/jinniewu/projects/work4/sr
   /usr/include/x86_64-linux-gnu/qt5/QtGui/qmatrix.h \
   /usr/include/x86_64-linux-gnu/qt5/QtGui/qpaintdevice.h \
   /usr/include/x86_64-linux-gnu/qt5/QtGui/qpainter.h \
+  /usr/include/x86_64-linux-gnu/qt5/QtGui/qpainterpath.h \
   /usr/include/x86_64-linux-gnu/qt5/QtGui/qpalette.h \
   /usr/include/x86_64-linux-gnu/qt5/QtGui/qpen.h \
   /usr/include/x86_64-linux-gnu/qt5/QtGui/qpixelformat.h \
@@ -4341,6 +4343,8 @@ vo_gui_autogen/mocs_compilation.cpp:
 
 /usr/include/x86_64-linux-gnu/qt5/QtGui/qpainter.h:
 
+/usr/include/x86_64-linux-gnu/qt5/QtGui/QPainterPath:
+
 /usr/include/x86_64-linux-gnu/qt5/QtGui/QPainter:
 
 /usr/include/x86_64-linux-gnu/qt5/QtCore/qmath.h:
@@ -4608,6 +4612,8 @@ vo_gui_autogen/mocs_compilation.cpp:
 /usr/include/c++/13/bits/stl_construct.h:
 
 /usr/include/c++/13/tr1/ell_integral.tcc:
+
+/usr/include/x86_64-linux-gnu/qt5/QtGui/qpainterpath.h:
 
 /usr/lib/x86_64-linux-gnu/cmake/Qt5Gui/Qt5GuiConfigVersion.cmake:
 
