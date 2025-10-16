@@ -20,7 +20,7 @@ public:
 
     // base: 序列根目录（含 image_0/000000.png ...）
     // K: 相机内参（可选；不传则用默认 focal_/pp_）
-    // poses_root: 可选：KITTI poses/00.txt 目录，用于绝对尺度
+    // poses_root: 可选：KITTI poses 根目录（包含 00.txt / 01.txt ...）
     bool init(const std::string& base,
               const cv::Mat& K = cv::Mat(),
               const std::string& poses_root = "");
@@ -37,8 +37,16 @@ public:
     cv::Mat getCurrentPose() const { return Tcw_; }
 
 private:
+    // 真值尺度：frame_{id-1} → frame_{id} 的位移长度（米）
     double getAbsoluteScale(int frame_id) const;
+
     static bool writeTextFile(const std::string& path, const std::string& content);
+
+    // 载入 poses（3x4 Tcw），兼容以下路径：
+    //   <poses_root>/dataset/poses/<seq>.txt
+    //   <poses_root>/poses/<seq>.txt
+    //   <poses_root>/<seq>.txt
+    bool loadPoses(const std::string& poses_root, const std::string& seq_id);
 
 private:
     // 路径/相机
@@ -65,6 +73,10 @@ private:
     // 默认内参（KITTI 00）
     double    focal_ = 718.8560;
     cv::Point2d pp_  = {607.1928, 185.2157};
+
+    // 绝对尺度相关
+    std::vector<cv::Mat> poses_gt_; // 每帧 3x4 Tcw
+    std::string seq_id_ = "00";
 };
 
 #endif // VO_MODULE_H

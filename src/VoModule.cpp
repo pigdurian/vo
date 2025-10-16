@@ -1,55 +1,119 @@
 #include "VoModule.h"
-#include "alg/vo_features.h" // 提供 featureDetection(img, pts) / featureTracking(...)
+#include "alg/vo_features.h" // 提供 featureDetection(img, pts)
 #include <fstream>
 #include <sstream>
+#include <iostream>
+#include <cctype>
 
 using namespace cv;
 using std::vector;
 
-static const char *dstr(int d)
-{
-    switch (d)
-    {
-    case CV_32F:
-        return "32F";
-    case CV_64F:
-        return "64F";
-    default:
-        return "?";
-    }
+// ----------------- 工具与调试 -----------------
+static const char* dstr(int d) {
+    switch (d) { case CV_32F: return "32F"; case CV_64F: return "64F"; default: return "?"; }
 }
 
-static void dumpTypes(const cv::Mat &F, const cv::Mat &K,
-                      const cv::Mat &R, const cv::Mat &t,
-                      const cv::Mat &Rf, const cv::Mat &tf)
-{
+static void dumpTypes(const cv::Mat& F, const cv::Mat& K,
+                      const cv::Mat& R, const cv::Mat& t,
+                      const cv::Mat& Rf, const cv::Mat& tf) {
     fprintf(stderr, "F:%s K:%s | R:%s t:%s | Rf:%s tf:%s\n",
             dstr(F.depth()), dstr(K.depth()),
             dstr(R.depth()), dstr(t.depth()),
             dstr(Rf.depth()), dstr(tf.depth()));
 }
 
-static inline std::string imgName(int idx)
-{
+static inline std::string imgName(int idx) {
     char b[16];
     std::snprintf(b, sizeof(b), "%06d.png", idx);
     return b;
 }
 
-bool VoEngine::init(const std::string &base, const Mat &K, const std::string &poses_root)
-{
-    base_ = base;
-    poses_root_ = poses_root;
+static inline std::string normalizeSlashes(std::string s) {
+    for (auto& c : s) if (c == '\\') c = '/';
+    return s;
+}
 
+// ----------------- poses 读入与尺度 -----------------
+bool VoEngine::loadPoses(const std::string& poses_root_in, const std::string& seq_id) {
+    poses_gt_.clear();
+
+    std::string root = normalizeSlashes(poses_root_in);
+    std::vector<std::string> candidates = {
+        root + "/dataset/poses/" + seq_id + ".txt",
+        root + "/poses/" + seq_id + ".txt",
+        root + "/" + seq_id + ".txt"
+    };
+
+    std::ifstream fin;
+    for (auto& p : candidates) {
+        fin.open(p);
+        if (fin.is_open()) {
+            std::cout << "[loadPoses] using: " << p << "\n";
+            break;
+        }
+    }
+    if (!fin.is_open()) {
+        std::cerr << "[loadPoses] cannot open poses file under root: " << root << "\n";
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(fin, line)) {
+        std::stringstream ss(line);
+        double m[12];
+        for (int i=0;i<12;i++) {
+            if (!(ss >> m[i])) { fin.close(); poses_gt_.clear(); return false; }
+        }
+        cv::Mat T = (cv::Mat_<double>(3,4) <<
+            m[0], m[1], m[2],  m[3],
+            m[4], m[5], m[6],  m[7],
+            m[8], m[9], m[10], m[11]
+        );
+        poses_gt_.push_back(T);
+    }
+    fin.close();
+    return !poses_gt_.empty();
+}
+
+double VoEngine::getAbsoluteScale(int frame_id) const {
+    // 返回 frame_{id-1} -> frame_{id} 的真值位移长度（米）
+    if (poses_gt_.empty()) return 1.0;
+    if (frame_id <= 0)     return 1.0;
+    if (frame_id >= (int)poses_gt_.size()) return 1.0;
+
+    cv::Mat t_prev = poses_gt_[frame_id-1](cv::Rect(3,0,1,3)); // 3x1
+    cv::Mat t_curr = poses_gt_[frame_id  ](cv::Rect(3,0,1,3)); // 3x1
+    return cv::norm(t_curr - t_prev);
+}
+
+// ----------------- 初始化 -----------------
+bool VoEngine::init(const std::string& base, const Mat& K, const std::string& poses_root)
+{
+    base_ = normalizeSlashes(base);
+    poses_root_ = normalizeSlashes(poses_root);
+
+    // 从 base 推断序列号（…/sequences/00）
+    {
+        std::string tail = base_;
+        auto pos = base_.find_last_of('/');
+        if (pos != std::string::npos) tail = base_.substr(pos+1);
+        if (tail.size()==2 && std::isdigit((unsigned char)tail[0]) && std::isdigit((unsigned char)tail[1]))
+            seq_id_ = tail;
+        else
+            seq_id_ = "00";
+    }
+
+    // 内参
     K_ = K.empty() ? (Mat_<double>(3, 3) << focal_, 0, pp_.x, 0, focal_, pp_.y, 0, 0, 1)
                    : K.clone();
     K_.convertTo(K_, CV_64F);
 
+    // 清零累计位姿
     R_f_ = Mat::eye(3, 3, CV_64F);
     t_f_ = (Mat_<double>(3, 1) << 0, 0, 0);
     Tcw_ = Mat::eye(4, 4, CV_64F);
 
-    // 画布：如果为空就创建，否则清空
+    // 画布
     if (trajCanvas_.empty())
         trajCanvas_ = cv::Mat::zeros(600, 800, CV_8UC3);
     else
@@ -59,8 +123,8 @@ bool VoEngine::init(const std::string &base, const Mat &K, const std::string &po
     last_inliers_.clear();
 
     // 读前两帧（同一相机：image_0）
-    Mat img1c = imread(base_ + "/image_0/" + imgName(0));
-    Mat img2c = imread(base_ + "/image_0/" + imgName(1));
+    Mat img1c = imread(base_ + "/image_0/" + imgName(0), IMREAD_COLOR);
+    Mat img2c = imread(base_ + "/image_0/" + imgName(1), IMREAD_COLOR);
     if (img1c.empty() || img2c.empty())
         return false;
 
@@ -79,8 +143,7 @@ bool VoEngine::init(const std::string &base, const Mat &K, const std::string &po
     p1.reserve(status.size());
     p2.reserve(status.size());
     for (size_t i = 0; i < status.size(); ++i)
-        if (status[i])
-        {
+        if (status[i]) {
             p1.push_back(pts1[i]);
             p2.push_back(pts2[i]);
         }
@@ -96,8 +159,7 @@ bool VoEngine::init(const std::string &base, const Mat &K, const std::string &po
     p1_in.reserve(maskE.total());
     p2_in.reserve(maskE.total());
     for (int i = 0; i < (int)maskE.total(); ++i)
-        if (maskE.at<uchar>(i))
-        {
+        if (maskE.at<uchar>(i)) {
             p1_in.push_back(p1[i]);
             p2_in.push_back(p2[i]);
         }
@@ -116,12 +178,11 @@ bool VoEngine::init(const std::string &base, const Mat &K, const std::string &po
     prevFeatures_ = p2_in.empty() ? p2 : p2_in;
     last_inliers_ = p2_in;
 
-    // 画一个起点更直观（x 用 tx，y 用 tz）
-    auto clamp = [](int v, int lo, int hi)
-    { return std::max(lo, std::min(hi, v)); };
+    // 画一个起点（x=tx, y=tz）
+    auto clamp = [](int v, int lo, int hi){ return std::max(lo, std::min(hi, v)); };
     int x0 = clamp(int(1.0 * t_f_.at<double>(0)) + 300, 0, trajCanvas_.cols - 1);
     int y0 = clamp(int(1.0 * t_f_.at<double>(2)) + 100, 0, trajCanvas_.rows - 1);
-    cv::circle(trajCanvas_, cv::Point(x0, y0), 2, CV_RGB(0, 255, 0), -1, cv::LINE_AA);
+    circle(trajCanvas_, Point(x0, y0), 2, CV_RGB(0, 255, 0), -1, cv::LINE_AA);
 
     // 更新 Tcw_
     Mat Tk = Mat::eye(4, 4, CV_64F);
@@ -129,50 +190,24 @@ bool VoEngine::init(const std::string &base, const Mat &K, const std::string &po
     t_f_.copyTo(Tk(Rect(3, 0, 1, 3)));
     Tcw_ = Tk.clone();
 
+    // 载入 GT poses（可选）
+    if (!poses_root_.empty()) {
+        if (!loadPoses(poses_root_, seq_id_)) {
+            std::cerr << "[init] warning: failed to load poses for seq " << seq_id_ << "\n";
+        } else {
+            std::cout << "[init] poses loaded: " << poses_gt_.size() << " frames for seq " << seq_id_ << "\n";
+        }
+    }
     return true;
 }
 
-double VoEngine::getAbsoluteScale(int frame_id) const
-{
-    if (poses_root_.empty())
-        return 1.0;
-
-    std::ifstream f(poses_root_ + "/00.txt");
-    if (!f.is_open())
-        return 1.0;
-
-    std::string line;
-    int i = 0;
-    double x = 0, y = 0, z = 0, xp = 0, yp = 0, zp = 0;
-    while (i <= frame_id && std::getline(f, line))
-    {
-        zp = z;
-        xp = x;
-        yp = y;
-        std::istringstream in(line);
-        // 读取 12 个数（3x4），取第 4 列 (x,y,z)
-        double a;
-        for (int j = 0; j < 12; ++j)
-        {
-            in >> a;
-            if (j == 3)
-                x = a;
-            if (j == 7)
-                y = a;
-            if (j == 11)
-                z = a;
-        }
-        ++i;
-    }
-    return std::sqrt((x - xp) * (x - xp) + (y - yp) * (y - yp) + (z - zp) * (z - zp));
-}
-
+// ----------------- 前进一帧 -----------------
 VoResult VoEngine::step(int numFrame)
 {
     VoResult out;
 
     // 当前帧（同一相机：image_0）
-    Mat currC = imread(base_ + "/image_0/" + imgName(numFrame));
+    Mat currC = imread(base_ + "/image_0/" + imgName(numFrame), IMREAD_COLOR);
     if (currC.empty())
         return out;
 
@@ -189,8 +224,7 @@ VoResult VoEngine::step(int numFrame)
     prevGood.reserve(status.size());
     currGood.reserve(status.size());
     for (size_t i = 0; i < status.size(); ++i)
-        if (status[i])
-        {
+        if (status[i]) {
             prevGood.push_back(prevFeatures_[i]);
             currGood.push_back(currFeatures[i]);
         }
@@ -198,13 +232,10 @@ VoResult VoEngine::step(int numFrame)
     auto refreshAndReturn = [&](bool redetect)
     {
         prevImage_ = curr.clone();
-        if (redetect)
-        {
+        if (redetect) {
             prevFeatures_.clear();
             featureDetection(curr, prevFeatures_);
-        }
-        else
-        {
+        } else {
             prevFeatures_ = currGood;
         }
         out.ok = false;
@@ -224,8 +255,7 @@ VoResult VoEngine::step(int numFrame)
     prevIn.reserve(maskE.total());
     currIn.reserve(maskE.total());
     for (int i = 0; i < (int)maskE.total(); ++i)
-        if (maskE.at<uchar>(i))
-        {
+        if (maskE.at<uchar>(i)) {
             prevIn.push_back(prevGood[i]);
             currIn.push_back(currGood[i]);
         }
@@ -253,22 +283,18 @@ VoResult VoEngine::step(int numFrame)
     Mat X4; // 4×N
     triangulatePoints(P0, P1, prevIn, currIn, X4);
 
-    for (int i = 0; i < X4.cols; ++i)
-    {
+    for (int i = 0; i < X4.cols; ++i) {
         double W = X4.at<double>(3, i);
-        if (std::abs(W) < 1e-12)
-            continue;
+        if (std::abs(W) < 1e-12) continue;
         double Xc = X4.at<double>(0, i) / W;
         double Yc = X4.at<double>(1, i) / W;
         double Zc = X4.at<double>(2, i) / W;
 
         // 正深度：在 prev / curr 都应 Z>0
-        if (Zc <= 0)
-            continue;
+        if (Zc <= 0) continue;
         Mat Xc1 = (Mat_<double>(3, 1) << Xc, Yc, Zc);
         Mat Xc1p = R * Xc1 + t;
-        if (Xc1p.at<double>(2) <= 0)
-            continue;
+        if (Xc1p.at<double>(2) <= 0) continue;
 
         // 变到世界：Xw = R_prev * Xc + t_prev
         Mat Xw = R_prev * Xc1 + t_prev;
@@ -287,11 +313,9 @@ VoResult VoEngine::step(int numFrame)
 
     // 可选：若发现多数点负深度，翻转 (R,t)（简单版）
     int front = 0, back = 0;
-    for (int i = 0; i < X4.cols; ++i)
-    {
+    for (int i = 0; i < X4.cols; ++i) {
         double W = X4.at<double>(3, i);
-        if (std::abs(W) < 1e-12)
-            continue;
+        if (std::abs(W) < 1e-12) continue;
         double Z0 = X4.at<double>(2, i) / W;
         double Xc = X4.at<double>(0, i) / W;
         double Yc = X4.at<double>(1, i) / W;
@@ -299,20 +323,15 @@ VoResult VoEngine::step(int numFrame)
                      R.at<double>(2, 1) * Yc +
                      R.at<double>(2, 2) * Z0 +
                      t.at<double>(2, 0));
-        if (Z0 > 0 && Z1 > 0)
-            front++;
-        else
-            back++;
+        if (Z0 > 0 && Z1 > 0) front++; else back++;
     }
-    if (back > front)
-    {
+    if (back > front) {
         R = R.t();
         t = -R * t;
     }
 
-    // 放宽条件：只保留小的尺度门槛，避免卡死
-    if (scale > 1e-3)
-    {
+    // 缩放并累计
+    if (scale > 1e-3) {
         t_f_ = t_f_ + scale * (R_f_ * t);
         R_f_ = R * R_f_;
     }
@@ -324,8 +343,7 @@ VoResult VoEngine::step(int numFrame)
     Tcw_ = Tk.clone();
 
     // 轨迹画布（越界保护）
-    auto clamp = [](int v, int lo, int hi)
-    { return std::max(lo, std::min(hi, v)); };
+    auto clamp = [](int v, int lo, int hi){ return std::max(lo, std::min(hi, v)); };
     double s = 1.0;
     int x = clamp(int(s * t_f_.at<double>(0)) + 300, 0, trajCanvas_.cols - 1);
     int y = clamp(int(s * t_f_.at<double>(2)) + 100, 0, trajCanvas_.rows - 1);
@@ -351,24 +369,23 @@ VoResult VoEngine::step(int numFrame)
     // 滚动缓存（不足则重打点）
     prevImage_ = curr.clone();
     prevFeatures_ = currIn;
-    if (prevFeatures_.size() < 100)
-    {
+    if (prevFeatures_.size() < 100) {
         featureDetection(curr, prevFeatures_);
     }
 
     return out;
 }
 
-bool VoEngine::writeTextFile(const std::string &path, const std::string &content)
+// ----------------- 导出 -----------------
+bool VoEngine::writeTextFile(const std::string& path, const std::string& content)
 {
     std::ofstream f(path, std::ios::out | std::ios::binary);
-    if (!f.is_open())
-        return false;
+    if (!f.is_open()) return false;
     f.write(content.data(), (std::streamsize)content.size());
     return (bool)f;
 }
 
-bool VoEngine::exportMapPLY(const std::string &path) const
+bool VoEngine::exportMapPLY(const std::string& path) const
 {
     // ASCII PLY：仅顶点
     std::ostringstream oss;
@@ -376,19 +393,17 @@ bool VoEngine::exportMapPLY(const std::string &path) const
         << "element vertex " << map_points_.size() << "\n"
         << "property float x\nproperty float y\nproperty float z\n"
         << "end_header\n";
-    for (const auto &p : map_points_)
-    {
+    for (const auto& p : map_points_) {
         oss << (float)p.x << " " << (float)p.y << " " << (float)p.z << "\n";
     }
     return writeTextFile(path, oss.str());
 }
 
-bool VoEngine::exportFeaturesCSV(const std::string &path) const
+bool VoEngine::exportFeaturesCSV(const std::string& path) const
 {
     std::ostringstream oss;
     oss << "u,v\n";
-    for (const auto &pt : last_inliers_)
-    {
+    for (const auto& pt : last_inliers_) {
         oss << pt.x << "," << pt.y << "\n";
     }
     return writeTextFile(path, oss.str());
