@@ -83,8 +83,8 @@ CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_qu
 CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_reg.so.4.6.0
 CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_surface_matching.so.4.6.0
 CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_viz.so.4.6.0
-CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_xphoto.so.4.6.0
 CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_alphamat.so.4.6.0
+CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_xphoto.so.4.6.0
 CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_dnn.so.4.6.0
 CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_dnn_superres.so.4.6.0
 CMakeFiles/vo_gui_autogen_timestamp_deps: /usr/lib/x86_64-linux-gnu/libopencv_features2d.so.4.6.0
