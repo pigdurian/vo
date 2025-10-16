@@ -1,0 +1,5 @@
+/home/jinniewu/projects/work4/build/CMakeFiles/vo_gui.dir
+/home/jinniewu/projects/work4/build/CMakeFiles/edit_cache.dir
+/home/jinniewu/projects/work4/build/CMakeFiles/rebuild_cache.dir
+/home/jinniewu/projects/work4/build/CMakeFiles/vo_gui_autogen_timestamp_deps.dir
+/home/jinniewu/projects/work4/build/CMakeFiles/vo_gui_autogen.dir
